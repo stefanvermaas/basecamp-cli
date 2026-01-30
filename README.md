@@ -1,6 +1,6 @@
-# Basecamp CLI
+# Basecamp CLI + Agent SKill
 
-A command-line interface for Basecamp written in Go with zero external dependencies.
+A command-line interface for [Basecamp](https://basecamp.com).
 
 ## Installation
 
