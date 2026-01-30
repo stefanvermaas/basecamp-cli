@@ -1,0 +1,154 @@
+package commands
+
+import (
+	"encoding/json"
+	"errors"
+	"regexp"
+	"strings"
+
+	"github.com/rzolkos/basecamp-cli/internal/client"
+)
+
+type CardCmd struct{}
+
+type Assignee struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+type CardDetail struct {
+	ID            int        `json:"id"`
+	Title         string     `json:"title"`
+	Content       string     `json:"content"`
+	Description   string     `json:"description"`
+	CreatedAt     string     `json:"created_at"`
+	UpdatedAt     string     `json:"updated_at"`
+	AppURL        string     `json:"app_url"`
+	CommentsCount int        `json:"comments_count"`
+	CommentsURL   string     `json:"comments_url"`
+	Creator       Creator    `json:"creator"`
+	Assignees     []Assignee `json:"assignees"`
+}
+
+type Comment struct {
+	ID        int     `json:"id"`
+	Content   string  `json:"content"`
+	CreatedAt string  `json:"created_at"`
+	Creator   Creator `json:"creator"`
+}
+
+type CommentOutput struct {
+	ID        int    `json:"id"`
+	Author    string `json:"author"`
+	Content   string `json:"content"`
+	CreatedAt string `json:"created_at"`
+}
+
+type CardDetailOutput struct {
+	ID          int             `json:"id"`
+	Title       string          `json:"title"`
+	Creator     string          `json:"creator"`
+	CreatedAt   string          `json:"created_at"`
+	UpdatedAt   string          `json:"updated_at"`
+	URL         string          `json:"url"`
+	Assignees   []string        `json:"assignees,omitempty"`
+	Description string          `json:"description"`
+	Comments    []CommentOutput `json:"comments,omitempty"`
+}
+
+func (c *CardCmd) Run(args []string) error {
+	if len(args) < 2 {
+		return errors.New("usage: basecamp card <project_id> <card_id> [--comments]")
+	}
+	projectID := args[0]
+	cardID := args[1]
+
+	showComments := false
+	for _, arg := range args[2:] {
+		if arg == "--comments" {
+			showComments = true
+			break
+		}
+	}
+
+	cl, err := client.New()
+	if err != nil {
+		return err
+	}
+
+	// Get the card
+	data, err := cl.Get("/buckets/" + projectID + "/card_tables/cards/" + cardID + ".json")
+	if err != nil {
+		return err
+	}
+
+	var card CardDetail
+	if err := json.Unmarshal(data, &card); err != nil {
+		return err
+	}
+
+	output := CardDetailOutput{
+		ID:          card.ID,
+		Title:       card.Title,
+		Creator:     card.Creator.Name,
+		CreatedAt:   card.CreatedAt,
+		UpdatedAt:   card.UpdatedAt,
+		URL:         card.AppURL,
+		Description: stripHTML(coalesce(card.Content, card.Description, "No description")),
+	}
+
+	if len(card.Assignees) > 0 {
+		output.Assignees = make([]string, len(card.Assignees))
+		for i, a := range card.Assignees {
+			output.Assignees[i] = a.Name
+		}
+	}
+
+	if showComments && card.CommentsCount > 0 {
+		commentsData, err := cl.GetAll(card.CommentsURL)
+		if err != nil {
+			return err
+		}
+
+		output.Comments = make([]CommentOutput, len(commentsData))
+		for i, commentJSON := range commentsData {
+			var comment Comment
+			if err := json.Unmarshal(commentJSON, &comment); err != nil {
+				return err
+			}
+			author := "Unknown"
+			if comment.Creator.Name != "" {
+				author = comment.Creator.Name
+			}
+			output.Comments[i] = CommentOutput{
+				ID:        comment.ID,
+				Author:    author,
+				Content:   stripHTML(comment.Content),
+				CreatedAt: comment.CreatedAt,
+			}
+		}
+	}
+
+	return PrintJSON(output)
+}
+
+var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
+var whitespaceRegex = regexp.MustCompile(`\s+`)
+
+func stripHTML(html string) string {
+	if html == "" {
+		return ""
+	}
+	text := htmlTagRegex.ReplaceAllString(html, " ")
+	text = whitespaceRegex.ReplaceAllString(text, " ")
+	return strings.TrimSpace(text)
+}
+
+func coalesce(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}

@@ -1,0 +1,99 @@
+package commands
+
+import (
+	"encoding/json"
+	"errors"
+
+	"github.com/rzolkos/basecamp-cli/internal/client"
+)
+
+type BoardsCmd struct{}
+
+type DockItem struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+type ProjectDetail struct {
+	ID   int        `json:"id"`
+	Name string     `json:"name"`
+	Dock []DockItem `json:"dock"`
+}
+
+type ColumnSummary struct {
+	Title      string `json:"title"`
+	CardsCount int    `json:"cards_count"`
+}
+
+type CardTable struct {
+	ID    int             `json:"id"`
+	Title string          `json:"title"`
+	Lists []ColumnSummary `json:"lists"`
+}
+
+type BoardOutput struct {
+	ProjectID   int             `json:"project_id"`
+	ProjectName string          `json:"project_name"`
+	BoardID     int             `json:"board_id"`
+	BoardTitle  string          `json:"board_title"`
+	Columns     []ColumnSummary `json:"columns"`
+}
+
+func (c *BoardsCmd) Run(args []string) error {
+	if len(args) < 1 {
+		return errors.New("usage: basecamp boards <project_id>")
+	}
+	projectID := args[0]
+
+	cl, err := client.New()
+	if err != nil {
+		return err
+	}
+
+	// Get project details
+	projectData, err := cl.Get("/projects/" + projectID + ".json")
+	if err != nil {
+		return err
+	}
+
+	var project ProjectDetail
+	if err := json.Unmarshal(projectData, &project); err != nil {
+		return err
+	}
+
+	// Find card table dock
+	var cardTableURL string
+	for _, dock := range project.Dock {
+		if dock.Name == "kanban_board" {
+			cardTableURL = dock.URL
+			break
+		}
+	}
+
+	if cardTableURL == "" {
+		return PrintJSON(map[string]any{
+			"project_id":   project.ID,
+			"project_name": project.Name,
+			"error":        "No card table found in this project",
+		})
+	}
+
+	// Get the card table
+	cardTableData, err := cl.Get(cardTableURL)
+	if err != nil {
+		return err
+	}
+
+	var cardTable CardTable
+	if err := json.Unmarshal(cardTableData, &cardTable); err != nil {
+		return err
+	}
+
+	return PrintJSON(BoardOutput{
+		ProjectID:   project.ID,
+		ProjectName: project.Name,
+		BoardID:     cardTable.ID,
+		BoardTitle:  cardTable.Title,
+		Columns:     cardTable.Lists,
+	})
+}
