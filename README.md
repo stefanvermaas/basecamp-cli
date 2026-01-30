@@ -1,4 +1,4 @@
-# Basecamp CLI + Agent SKill
+# Basecamp CLI + Agent Skill
 
 A command-line interface for [Basecamp](https://basecamp.com).
 
