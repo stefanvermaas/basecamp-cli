@@ -243,11 +243,6 @@ func (c *MessageCreateCmd) Run(args []string) error {
 		payload["content"] = content
 	}
 
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
 	// POST to messages URL
 	messagesURL := board.MessagesURL
 	// Convert from full URL to path
@@ -255,7 +250,7 @@ func (c *MessageCreateCmd) Run(args []string) error {
 		messagesURL = messagesURL[idx:]
 	}
 
-	responseData, err := cl.Post(messagesURL, payloadBytes)
+	responseData, err := cl.Post(messagesURL, payload)
 	if err != nil {
 		return err
 	}

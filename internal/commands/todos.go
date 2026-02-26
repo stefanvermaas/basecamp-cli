@@ -176,7 +176,7 @@ func (c *TodoCreateCmd) Run(args []string) error {
 	}
 	todolistID := remaining[0]
 
-	var content, description, dueOn string
+	var content, description, dueOn, assignees string
 	for i := 1; i < len(remaining); i++ {
 		switch remaining[i] {
 		case "--content":
@@ -192,6 +192,11 @@ func (c *TodoCreateCmd) Run(args []string) error {
 		case "--due":
 			if i+1 < len(remaining) {
 				dueOn = remaining[i+1]
+				i++
+			}
+		case "--assignees":
+			if i+1 < len(remaining) {
+				assignees = remaining[i+1]
 				i++
 			}
 		}
@@ -214,6 +219,19 @@ func (c *TodoCreateCmd) Run(args []string) error {
 	}
 	if dueOn != "" {
 		payload["due_on"] = dueOn
+	}
+	if assignees != "" {
+		var assigneeIDs []int
+		for _, idStr := range strings.Split(assignees, ",") {
+			idStr = strings.TrimSpace(idStr)
+			if id, err := strconv.Atoi(idStr); err == nil {
+				assigneeIDs = append(assigneeIDs, id)
+			}
+		}
+		if len(assigneeIDs) > 0 {
+			payload["assignee_ids"] = assigneeIDs
+			payload["notify"] = true
+		}
 	}
 
 	data, err := cl.Post("/buckets/"+projectID+"/todolists/"+todolistID+"/todos.json", payload)
